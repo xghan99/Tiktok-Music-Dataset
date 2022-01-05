@@ -1,0 +1,167 @@
+-- Database: Tiktok Music
+
+-- DROP DATABASE IF EXISTS "Tiktok Music";
+DROP DATABASE "Tiktok Music"
+
+CREATE DATABASE "Tiktok Music"
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'English_United States.1252'
+    LC_CTYPE = 'English_United States.1252'
+    TABLESPACE = pg_default
+    CONNECTION LIMIT = -1;
+
+/*Creating Table */
+DROP TABLE trending CASCADE
+
+CREATE TABLE trending (
+	track_id varchar(255),
+	track_name varchar(255),
+	artist_id varchar(255),
+	artist_name varchar(255),
+	duration INT,
+	release_date varchar(255),
+	popularity INT,
+	danceability double precision,
+	loudness double precision,
+	tempo double precision
+)
+
+/* Transferring Data from CSV file */
+COPY trending FROM 'C:/Users/xghan/Downloads/tiktok_edited.csv' DELIMITER ',' CSV HEADER
+
+SELECT * FROM trending
+
+/* Creating New Table with no duplicate */
+DROP TABLE trending_dr CASCADE
+
+CREATE TABLE trending_dr AS 
+(WITH T1 AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY track_id) AS rownum FROM trending) 
+SELECT * from t1 WHERE rownum = 1)
+
+SELECT * FROM trending_dr
+
+/* Top 10 Artists with most tracks (w/ ties included) */
+DROP VIEW top_10_artists_tracks
+
+CREATE VIEW top_10_artists_tracks AS
+(WITH T1 AS (SELECT artist_id, artist_name, COUNT(*) AS num_tracks
+FROM trending_dr
+GROUP BY artist_id, artist_name),
+T2 as (SELECT * 
+	   FROM T1 
+	   ORDER BY num_tracks DESC
+	  LIMIT 10),
+T3 as (SELECT MIN(num_tracks) AS min_tracks
+	  FROM T2)
+SELECT artist_id, artist_name, num_tracks 
+FROM T1,T3
+WHERE T1.num_tracks >= T3.min_tracks
+ORDER BY num_tracks DESC)
+
+SELECT * FROM top_10_artists_tracks
+
+/* Top 10 Artists with highest average popularity (ties included) */
+DROP VIEW top_10_artists_pop
+
+CREATE VIEW top_10_artists_pop AS
+(WITH T1 AS (SELECT artist_id, artist_name, AVG(popularity) AS avg_popularity, COUNT(*) AS num_tracks
+FROM trending_dr
+GROUP BY artist_id, artist_name),
+T2 AS (SELECT * 
+	   FROM T1 
+	   ORDER BY avg_popularity DESC
+	  LIMIT 10),
+T3 AS (SELECT MIN(avg_popularity) AS min_popularity
+	  FROM T2)
+SELECT artist_id, artist_name, avg_popularity, num_tracks 
+FROM T1,T3
+WHERE T1.avg_popularity >= T3.min_popularity
+ORDER BY avg_popularity DESC, num_tracks DESC)
+
+SELECT * FROM top_10_artists_pop
+
+/* Top 10 Most Popular Tracks (w/ ties included)*/
+DROP VIEW top_10_tracks
+
+CREATE VIEW top_10_tracks AS
+(WITH T1 as (SELECT track_id, track_name, popularity
+FROM trending_dr),
+T2 as (SELECT * 
+	   FROM T1 
+	   ORDER BY popularity DESC
+	  LIMIT 10),
+T3 as (SELECT MIN(popularity) as min_popularity
+	  FROM T2)
+SELECT track_id,track_name, popularity
+FROM T1,T3
+WHERE T1.popularity >= T3.min_popularity
+ORDER BY popularity DESC)
+
+SELECT * FROM top_10_tracks
+
+/*Number of Songs by Release Year*/
+DROP VIEW songs_release_year
+
+CREATE VIEW songs_release_year AS
+(WITH T1 as (SELECT *, RIGHT(release_date,4) as release_year from trending_dr)
+SELECT release_year, COUNT(*) as num_releases
+FROM T1
+GROUP BY release_year
+ORDER BY num_releases DESC, release_year DESC)
+
+SELECT * FROM songs_release_year
+
+/* Most Popular Song released in each of the last 5 years */
+DROP VIEW popular_song_year
+
+CREATE VIEW popular_song_year AS
+(WITH T1 as (SELECT *, CAST(RIGHT(release_date,4) AS INT) as release_year FROM trending_dr),
+T2 as (SELECT release_year, MAX(popularity) as most_popular FROM T1 GROUP BY release_year)
+SELECT T1.release_year,T1.track_name, T1.artist_name ,T1.popularity
+FROM T1,T2
+WHERE T1.release_year=T2.release_year and T1.popularity=T2.most_popular and T1.release_year>2016
+ORDER BY release_year DESC)
+
+SELECT * FROM popular_song_year
+
+/* Converting to Percentiles  for duration,danceability, loudness,tempo */
+DROP VIEW Percentile_Values
+
+CREATE VIEW Percentile_Values as 
+(SELECT track_id, track_name, artist_id, artist_name, release_date, popularity, 100*PERCENT_RANK() OVER (ORDER BY duration) as dur_perc,
+100*PERCENT_RANK() OVER (ORDER BY danceability) as dance_per, 100*PERCENT_RANK() OVER (ORDER BY loudness) as loudness_per,
+100*PERCENT_RANK() OVER (ORDER BY tempo) as tempo_per
+FROM trending_dr)
+
+SELECT * FROM Percentile_Values
+
+/*Analysing top 10 popular songs by percentiles*/
+
+SELECT * 
+FROM top_10_tracks join Percentile_Values
+ON top_10_tracks.track_id=Percentile_Values.track_id
+
+
+
+/* Trends with Time */
+DROP VIEW trends_time
+
+CREATE VIEW trends_time AS
+(WITH T1 as (SELECT *, RIGHT(release_date,4) as release_year from trending_dr)
+SELECT release_year, AVG(danceability) as avg_dance, AVG(loudness) as avg_loud, AVG(popularity) as avg_pop, AVG(tempo) as avg_tempo, 
+AVG(duration) as avg_dur
+FROM T1
+GROUP BY release_year
+ORDER BY release_year DESC)
+
+SELECT * from trends_time
+
+/* Loudness, Danceability, Tempo, Duration  of top 10 artists */
+
+
+SELECT top_10_artists_tracks.artist_id, top_10_artists_tracks.artist_name, AVG(duration), AVG(tempo), AVG(loudness), AVG(danceability)
+FROM top_10_artists_tracks join trending_dr
+ON top_10_artists_tracks.artist_id=trending_dr.artist_id
+GROUP BY top_10_artists_tracks.artist_id, top_10_artists_tracks.artist_name
