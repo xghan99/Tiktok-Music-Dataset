@@ -5,6 +5,6 @@ The Dataset is obtained from https://www.kaggle.com/yamqwe/tiktok-trending-track
 
 *Note that certain columns of the dataset by me were removed prior to the analysis*
 
-Tableau Dashboard: https://public.tableau.com/shared/TW878XTXW?:display_count=n&:origin=viz_share_link
+Tableau Dashboard: https://public.tableau.com/app/profile/han.xiao.guang/viz/TiktokTrendingMusic/Dashboard1
 
 Technologies Used: PostgreSQL and Tableau
